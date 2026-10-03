@@ -61,9 +61,37 @@ with st.sidebar:
     key = st.text_input("Groq API key", type="password",
                         value=st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY", "")) if hasattr(st, "secrets") else "")
     model = st.selectbox("LLM", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"])
-    up = st.file_uploader("Production CSV (day, rate, whp, wc)", type="csv")
-    df = pd.read_csv(up) if up else demo_data()
-    st.caption("Using uploaded data" if up else "Using synthetic demo well")
+    up = st.file_uploader("Production CSV (any column names)", type="csv")
+    df = demo_data(); src = "synthetic demo well"
+    def pick(opts, keys, default=0):
+        for i, c_ in enumerate(opts):
+            if any(k in str(c_).lower() for k in keys): return i
+        return default
+    if up:
+        try:
+            raw = pd.read_csv(up); raw.columns = [str(c_).strip() for c_ in raw.columns]
+            num = raw.select_dtypes("number").columns.tolist()
+            if not num: raise ValueError("no numeric columns found")
+            rc = st.selectbox("Oil rate column", num, index=pick(num, ["rate", "oil", "bopd", "qo", "prod"], len(num) - 1))
+            tl = ["(row index)"] + list(raw.columns)
+            dc = st.selectbox("Time column (day or date)", tl, index=pick(tl, ["day", "date", "time"]))
+            pc = st.selectbox("Pressure column (optional)", ["(none)"] + num, index=pick(["(none)"] + num, ["whp", "press", "psi", "thp"]))
+            wcc = st.selectbox("Water cut column (optional)", ["(none)"] + num, index=pick(["(none)"] + num, ["wc", "water", "bsw"]))
+            out = pd.DataFrame({"rate": pd.to_numeric(raw[rc], errors="coerce")})
+            if dc == "(row index)": out["day"] = np.arange(len(raw))
+            else:
+                s_ = raw[dc]
+                if pd.api.types.is_numeric_dtype(s_): out["day"] = s_
+                else:
+                    dts = pd.to_datetime(s_, errors="coerce"); out["day"] = (dts - dts.min()).dt.days
+            if pc != "(none)": out["whp"] = pd.to_numeric(raw[pc], errors="coerce")
+            if wcc != "(none)": out["wc"] = pd.to_numeric(raw[wcc], errors="coerce")
+            out = out.dropna().sort_values("day").reset_index(drop=True); out["day"] = out["day"] - out["day"].min()
+            if len(out) < 15: raise ValueError("need at least 15 valid rows")
+            df, src = out, f"your data ({len(out)} rows)"
+        except Exception as e:
+            st.error(f"Could not use CSV: {e}. Falling back to demo data.")
+    st.caption(f"Using {src}")
 
 tA, tB, t1, t2, t3, t4, t5, t6 = st.tabs(["🧠 Autonomous Agent", "⚖️ Decision Engine", "📉 Decline & EUR",
                                           "🛢️ Nodal (IPR/VLP)", "🧪 PVT & MBAL", "📈 Well Test",
