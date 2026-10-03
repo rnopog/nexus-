@@ -50,7 +50,7 @@ def z_papay(p, T_F, sg):
     pr, tr = p / ppc, (T_F + 460) / tpc
     return 1 - 3.52 * pr * np.exp(-2.26 * tr) + .274 * pr ** 2 * np.exp(-1.878 * tr)
 
-def groq_chat(messages, key, model="llama-3.3-70b-versatile", temp=.2):
+def groq_chat(messages, key, model="openai/gpt-oss-120b", temp=.2):
     from groq import Groq
     r = Groq(api_key=key).chat.completions.create(model=model, messages=messages, temperature=temp)
     return r.choices[0].message.content
@@ -58,9 +58,12 @@ def groq_chat(messages, key, model="llama-3.3-70b-versatile", temp=.2):
 # ---------------- sidebar ----------------
 with st.sidebar:
     st.header("⚙️ Setup")
-    key = st.text_input("Groq API key", type="password",
-                        value=st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY", "")) if hasattr(st, "secrets") else "")
-    model = st.selectbox("LLM", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"])
+    try: key = st.secrets["GROQ_API_KEY"]
+    except Exception: key = os.getenv("GROQ_API_KEY", "")
+    if key: st.success("🔑 Groq key loaded from secrets")
+    else: key = st.text_input("Groq API key", type="password")
+    model = "openai/gpt-oss-120b"
+    st.caption(f"LLM: {model} (Groq)")
     up = st.file_uploader("Production CSV (any column names)", type="csv")
     df = demo_data(); src = "synthetic demo well"
     def pick(opts, keys, default=0):
